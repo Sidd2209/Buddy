@@ -5,7 +5,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: cd backend && python app.py
+    startCommand: cd backend && python wsgi.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
@@ -13,6 +13,8 @@ services:
         value: production
       - key: FLASK_APP
         value: app.py
+      - key: SECRET_KEY
+        generateValue: true
 
   # Frontend service
   - type: static

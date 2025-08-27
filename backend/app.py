@@ -11,11 +11,11 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
 # Enable CORS for all routes
 CORS(app, origins="*")
 
-# Use threading for Python 3.12 compatibility
+# Use threading for Python 3.13 compatibility
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode='eventlet',
+    async_mode='threading',
     logger=False,
     engineio_logger=False
 )
