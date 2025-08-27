@@ -1,16 +1,21 @@
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit, disconnect
+from flask_cors import CORS
 import uuid
+import os
 from user_manager import UserManager
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-here'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
+
+# Enable CORS for all routes
+CORS(app, origins="*")
 
 # Use threading for Python 3.12 compatibility
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode='threading',
+    async_mode='eventlet',
     logger=False,
     engineio_logger=False
 )
@@ -54,17 +59,20 @@ def handle_answer(data):
 def handle_ice_candidate(data):
     user_manager.room_manager.on_ice_candidates(data['roomId'], request.sid, data['candidate'], data['type'])
 
+@app.route('/')
+def health_check():
+    return {'status': 'ok', 'message': 'FreeTalk Backend is running'}
+
 if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 3000))
     print("🚀 Starting FreeTalk Server...")
-    print("📱 Access URLs:")
-    print("   Frontend: http://localhost:5173")
-    print("   Backend:  http://localhost:3000")
+    print(f"📱 Backend URL: http://localhost:{port}")
     print("")
 
     socketio.run(
         app,
         host='0.0.0.0',
-        port=3000,
+        port=port,
         debug=False,
         allow_unsafe_werkzeug=True
     )

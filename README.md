@@ -1,181 +1,117 @@
-# FreeTalk - Video Chat Application
+# FreeTalk - Random Video Chat Application
 
-A modern video chat application built with React frontend and Flask backend, featuring WebRTC for peer-to-peer video communication.
+A modern video chat application similar to Omegle, built with React, WebRTC, and Flask.
 
 ## Features
 
 - 🎥 Real-time video chat with strangers
 - 🎤 Audio and video controls
-- 🎨 Modern, responsive UI with glass morphism design
-- 🔄 Automatic user pairing system
-- 📱 Mobile-responsive design
-- 🚀 Offline-first architecture
+- 🔄 Next chat functionality
+- 🎨 Modern, responsive UI
+- 🔒 Secure peer-to-peer connections
 
 ## Tech Stack
 
-### Frontend
-- React 18
-- Vite
-- Tailwind CSS
-- Socket.IO Client
-- WebRTC
+- **Frontend**: React + Vite + Tailwind CSS
+- **Backend**: Flask + Socket.IO
+- **Real-time Communication**: WebRTC + Socket.IO
+- **Deployment**: Render
 
-### Backend
-- Flask
-- Flask-SocketIO
-- Python 3.8+
+## Local Development
 
-## Prerequisites
+### Prerequisites
 
+- Node.js (v16 or higher)
 - Python 3.8 or higher
-- Node.js 16 or higher
-- npm or yarn
+- Modern browser with camera/microphone support
 
-## Installation & Setup
+### Setup
 
-### 1. Clone the repository
-```bash
-git clone <repository-url>
-cd freeTalk
-```
+1. Clone the repository
+2. Install frontend dependencies:
+   ```bash
+   npm install
+   ```
 
-### 2. Backend Setup (Flask)
+3. Install backend dependencies:
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   cd ..
+   ```
 
-Navigate to the backend directory:
-```bash
-cd backend
-```
+4. Start the application:
+   ```bash
+   chmod +x start.sh
+   ./start.sh
+   ```
 
-Create a virtual environment:
-```bash
-python -m venv venv
-```
+5. Open your browser and navigate to `http://localhost:5173`
 
-Activate the virtual environment:
-- **Windows:**
-  ```bash
-  venv\Scripts\activate
-  ```
-- **macOS/Linux:**
-  ```bash
-  source venv/bin/activate
-  ```
+## Deployment on Render
 
-Install Python dependencies:
-```bash
-pip install -r requirements.txt
-```
+### Option 1: Using render.yaml (Recommended)
 
-### 3. Frontend Setup (React)
+1. Push your code to a Git repository (GitHub, GitLab, etc.)
+2. Connect your repository to Render
+3. Render will automatically detect the `render.yaml` file and deploy both services
 
-Navigate to the project root:
-```bash
-cd ..
-```
+### Option 2: Manual Deployment
 
-Install Node.js dependencies:
-```bash
-npm install
-```
+#### Backend Service
 
-## Running the Application
+1. Create a new **Web Service** on Render
+2. Connect your Git repository
+3. Configure the service:
+   - **Build Command**: `pip install -r backend/requirements.txt`
+   - **Start Command**: `cd backend && python app.py`
+   - **Environment**: Python
 
-### 1. Start the Flask Backend
+#### Frontend Service
 
-In the backend directory (with virtual environment activated):
-```bash
-python app.py
-```
+1. Create a new **Static Site** on Render
+2. Connect your Git repository
+3. Configure the service:
+   - **Build Command**: `npm install && npm run build`
+   - **Publish Directory**: `dist`
+   - **Environment Variable**: 
+     - Key: `VITE_BACKEND_URL`
+     - Value: Your backend service URL
 
-The backend will start on `http://localhost:3000`
+### Environment Variables
 
-### 2. Start the React Frontend
+Set these environment variables in your Render services:
 
-In the project root directory:
-```bash
-npm run dev
-```
+**Backend Service:**
+- `SECRET_KEY`: A secure random string for Flask sessions
+- `PORT`: Port number (Render will set this automatically)
 
-The frontend will start on `http://localhost:5173`
+**Frontend Service:**
+- `VITE_BACKEND_URL`: The URL of your backend service
 
-### 3. Access the Application
+## How It Works
 
-Open your browser and navigate to `http://localhost:5173`
+1. Users connect to the backend via Socket.IO
+2. The backend manages a queue of users waiting to chat
+3. When two users are available, they're paired in a room
+4. WebRTC handles the peer-to-peer video/audio connection
+5. The backend only handles signaling (offer/answer exchange)
 
-## Usage
+## Security Features
 
-1. **Enter Your Name**: On the landing page, enter your name in the input field
-2. **Allow Camera Access**: Grant camera and microphone permissions when prompted
-3. **Start Chatting**: Click "Start Chatting" to be paired with a random stranger
-4. **Video Controls**: Use the control buttons to toggle video/audio or end the call
+- HTTPS required for camera/microphone access
+- CORS properly configured
+- No data stored on servers
+- Peer-to-peer connections
 
-## Project Structure
+## Browser Support
 
-```
-freeTalk/
-├── backend/
-│   ├── app.py              # Main Flask application
-│   ├── user_manager.py     # User management logic
-│   ├── room_manager.py     # Room management logic
-│   └── requirements.txt    # Python dependencies
-├── src/
-│   ├── components/
-│   │   ├── Landing.jsx     # Landing page component
-│   │   └── Room.jsx        # Video chat room component
-│   ├── App.jsx             # Main app component
-│   ├── App.css             # Custom styles
-│   └── index.css           # Global styles
-├── package.json            # Node.js dependencies
-└── README.md              # This file
-```
-
-## Development
-
-### Backend Development
-
-The Flask backend handles:
-- WebSocket connections via Flask-SocketIO
-- User pairing and room management
-- WebRTC signaling (offer/answer exchange)
-- ICE candidate exchange
-
-### Frontend Development
-
-The React frontend provides:
-- Modern, responsive UI
-- WebRTC peer connections
-- Real-time video/audio streaming
-- User interface controls
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Camera not working**: Ensure you've granted camera permissions in your browser
-2. **Connection issues**: Check that both backend and frontend are running
-3. **Port conflicts**: If port 3000 is in use, modify the port in `backend/app.py`
-
-### Browser Compatibility
-
-This application works best with:
-- Chrome 80+
-- Firefox 75+
-- Safari 13+
-- Edge 80+
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+- Chrome/Chromium (recommended)
+- Firefox
+- Safari
+- Edge
 
 ## License
 
-This project is licensed under the MIT License.
-
-## Support
-
-For support or questions, please open an issue in the repository.
+ISC
 

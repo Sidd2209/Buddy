@@ -11,6 +11,12 @@ export const Landing = () => {
   const videoRef = useRef(null);
 
   const requestMediaAccess = async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setMediaError("Your browser does not support camera/microphone access. Please use Chrome, Firefox, or Safari on HTTPS.");
+      return;
+    }
+  
+  
     try {
       setIsLoading(true);
       setMediaError(null);
