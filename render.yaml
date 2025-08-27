@@ -1,7 +1,7 @@
 services:
   # Backend API service
   - type: web
-    name: freetalk-backend
+    name: buddy-backend
     env: python
     plan: free
     buildCommand: pip install -r backend/requirements.txt
@@ -18,13 +18,15 @@ services:
 
   # Frontend service
   - type: static
-    name: freetalk-frontend
+    name: buddy-frontend
     plan: free
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     envVars:
       - key: VITE_BACKEND_URL
         fromService:
-          name: freetalk-backend
+          name: buddy-backend
           type: web
           property: url
+      - key: NODE_ENV
+        value: production

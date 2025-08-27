@@ -61,11 +61,11 @@ def handle_ice_candidate(data):
 
 @app.route('/')
 def health_check():
-    return {'status': 'ok', 'message': 'FreeTalk Backend is running'}
+    return {'status': 'ok', 'message': 'Buddy Backend is running'}
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 3000))
-    print("🚀 Starting FreeTalk Server...")
+    print("🚀 Starting Buddy Server...")
     print(f"📱 Backend URL: http://localhost:{port}")
     print("")
 

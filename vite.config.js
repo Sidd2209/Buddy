@@ -13,5 +13,7 @@ export default defineConfig({
   },
   define: {
     'process.env': {}
-  }
+  },
+  // Ensure environment variables are properly handled
+  envPrefix: 'VITE_'
 })

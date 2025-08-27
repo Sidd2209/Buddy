@@ -1,6 +1,6 @@
-# Deployment Guide for FreeTalk on Render
+# Deployment Guide for Buddy on Render
 
-This guide will walk you through deploying your FreeTalk application to Render.
+This guide will walk you through deploying your Buddy application to Render.
 
 ## Prerequisites
 
@@ -53,7 +53,7 @@ Buddy/
    - Connect your Git repository
 
 2. **Configure Backend Service**
-   - **Name**: `freetalk-backend`
+   - **Name**: `buddy-backend`
    - **Environment**: `Python 3`
    - **Build Command**: `pip install -r backend/requirements.txt`
    - **Start Command**: `cd backend && python app.py`
@@ -66,7 +66,7 @@ Buddy/
 4. **Deploy**
    - Click "Create Web Service"
    - Wait for deployment to complete
-   - Note the service URL (e.g., `https://freetalk-backend.onrender.com`)
+   - Note the service URL (e.g., `https://buddy-backend.onrender.com`)
 
 #### Deploy Frontend
 
@@ -75,14 +75,14 @@ Buddy/
    - Connect your Git repository
 
 2. **Configure Frontend Service**
-   - **Name**: `freetalk-frontend`
+   - **Name**: `buddy-frontend`
    - **Build Command**: `npm install && npm run build`
    - **Publish Directory**: `dist`
    - **Plan**: Free
 
 3. **Environment Variables**
    - Add `VITE_BACKEND_URL` with your backend service URL
-   - Example: `https://freetalk-backend.onrender.com`
+   - Example: `https://buddy-backend.onrender.com`
 
 4. **Deploy**
    - Click "Create Static Site"
@@ -92,7 +92,7 @@ Buddy/
 
 1. **Test Backend**
    - Visit your backend URL
-   - You should see: `{"status": "ok", "message": "FreeTalk Backend is running"}`
+   - You should see: `{"status": "ok", "message": "Buddy Backend is running"}`
 
 2. **Test Frontend**
    - Visit your frontend URL
@@ -186,7 +186,7 @@ VITE_BACKEND_URL=https://your-backend-service.onrender.com
 
 - **Render Documentation**: [docs.render.com](https://docs.render.com)
 - **Render Community**: [community.render.com](https://community.render.com)
-- **FreeTalk Issues**: Check your repository issues
+- **Buddy Issues**: Check your repository issues
 
 ## Cost
 
@@ -194,4 +194,4 @@ VITE_BACKEND_URL=https://your-backend-service.onrender.com
 - **Paid Plans**: Starting from $7/month for better performance
 - **Bandwidth**: Free tier includes 750 hours/month
 
-Your FreeTalk application should now be live and accessible to users worldwide! 🎉
+Your Buddy application should now be live and accessible to users worldwide! 🎉

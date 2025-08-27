@@ -4,6 +4,11 @@ import { io } from "socket.io-client";
 // Use localhost for local development
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL) || "http://localhost:3000";
 
+// Debug logging
+console.log("Environment variables:", import.meta.env);
+console.log("Backend URL:", BACKEND_URL);
+console.log("VITE_BACKEND_URL value:", import.meta.env.VITE_BACKEND_URL);
+
 // WebRTC configuration with STUN servers
 const rtcConfiguration = {
   iceServers: [
@@ -380,7 +385,7 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       <div className="bg-white/10 backdrop-blur-lg border-b border-white/20 p-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <h1 className="text-2xl font-bold text-white">FreeTalk</h1>
+            <h1 className="text-2xl font-bold text-white">Buddy</h1>
             <div className="flex items-center space-x-2">
               <div className={`w-3 h-3 rounded-full ${lobby ? 'bg-yellow-400' : partnerDisconnected ? 'bg-red-400' : 'bg-green-400'} animate-pulse`} />
               <span className="text-gray-300 text-sm">{connectionStatus}</span>

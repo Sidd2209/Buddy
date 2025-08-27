@@ -1,4 +1,4 @@
-# FreeTalk - Random Video Chat Application
+# Buddy - Random Video Chat Application
 
 A modern video chat application similar to Omegle, built with React, WebRTC, and Flask.
 
@@ -64,13 +64,13 @@ A modern video chat application similar to Omegle, built with React, WebRTC, and
 2. Connect your Git repository
 3. Configure the service:
    - **Build Command**: `pip install -r backend/requirements.txt`
-   - **Start Command**: `cd backend && python app.py`
+   - **Start Command**: `cd backend && python wsgi.py`
    - **Environment**: Python
 
 #### Frontend Service
 
 1. Create a new **Static Site** on Render
-2. Connect your Git repository
+2. Connect your repository
 3. Configure the service:
    - **Build Command**: `npm install && npm run build`
    - **Publish Directory**: `dist`

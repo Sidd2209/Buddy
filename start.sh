@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🚀 Starting FreeTalk Application..."
+echo "🚀 Starting Buddy Application..."
 echo ""
 
 # Check if Node.js is installed
@@ -38,7 +38,7 @@ npm run dev &
 FRONTEND_PID=$!
 
 echo ""
-echo "✅ FreeTalk is starting up!"
+echo "✅ Buddy is starting up!"
 echo "📱 Frontend: http://localhost:5173"
 echo "🔧 Backend:  http://localhost:3000"
 echo ""

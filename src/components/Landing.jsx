@@ -87,7 +87,7 @@ export const Landing = () => {
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center p-4">
       <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 shadow-2xl border border-white/20 max-w-md w-full">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">FreeTalk</h1>
+          <h1 className="text-4xl font-bold text-white mb-2">Buddy</h1>
           <p className="text-gray-300 text-lg">Connect with strangers worldwide</p>
         </div>
 
