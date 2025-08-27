@@ -15,9 +15,8 @@ services:
         value: app.py
 
   # Frontend service
-  - type: web
+  - type: static
     name: freetalk-frontend
-    env: static
     plan: free
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
