@@ -88,7 +88,7 @@ export const Landing = () => {
       <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 shadow-2xl border border-white/20 max-w-md w-full">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">Buddy</h1>
-          <p className="text-gray-300 text-lg">Connect with strangers worldwide</p>
+          <p className="text-gray-300 text-lg">IITG Buddies</p>
         </div>
 
         {!localVideoTrack && !isLoading && !mediaError && (
