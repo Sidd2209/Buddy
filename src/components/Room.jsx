@@ -23,9 +23,26 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
   const [receivingPc, setReceivingPc] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState("Connecting...");
   const [error, setError] = useState(null);
+  const [partnerDisconnected, setPartnerDisconnected] = useState(false);
 
   const remoteVideoRef = useRef(null);
   const localVideoRef = useRef(null);
+
+  // Cleanup function for WebRTC connections
+  const cleanupConnections = () => {
+    if (sendingPc) {
+      sendingPc.close();
+      setSendingPc(null);
+    }
+    if (receivingPc) {
+      receivingPc.close();
+      setReceivingPc(null);
+    }
+    // Clear remote video stream
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
+  };
 
   useEffect(() => {
     console.log("Connecting to backend:", BACKEND_URL);
@@ -42,6 +59,9 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
     s.on("connect", () => {
       console.log("Connected to server:", s.id);
       setConnectionStatus("Connected to server");
+      setPartnerDisconnected(false);
+      // Ensure we're in the queue when connected
+      s.emit('ready-for-new');
     });
 
     s.on("connect_error", (error) => {
@@ -55,9 +75,27 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       setConnectionStatus("Disconnected");
     });
 
+    s.on("partner-disconnected", () => {
+      console.log("Partner disconnected");
+      setPartnerDisconnected(true);
+      setConnectionStatus("Partner disconnected - finding new match...");
+      cleanupConnections();
+      
+      // Immediately queue for a new match
+      s.emit('ready-for-new');
+      
+      // Show message briefly while we wait for server to pair
+      setTimeout(() => {
+        setPartnerDisconnected(false);
+        setLobby(true);
+        setConnectionStatus("Finding someone...");
+      }, 1200);
+    });
+
     s.on("send-offer", async ({ roomId }) => {
       console.log("Creating offer for room:", roomId);
       setLobby(false);
+      setPartnerDisconnected(false);
       setConnectionStatus("Establishing connection...");
       
       try {
@@ -122,34 +160,28 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       }
     });
 
-    s.on("offer", async ({ roomId, sdp: remoteSdp }) => {
-      console.log("Received offer for room:", roomId);
+    // New: wait-offer role; prepare PC and only answer once offer arrives
+    s.on("wait-offer", async ({ roomId }) => {
+      console.log("Waiting for offer in room:", roomId);
       setLobby(false);
+      setPartnerDisconnected(false);
       setConnectionStatus("Establishing connection...");
-      
+
       try {
         const pc = new RTCPeerConnection(rtcConfiguration);
 
-        // Add local tracks BEFORE creating the answer so this peer sends media too
         if (localVideoTrack) {
-          console.log("Adding local video track");
           pc.addTrack(localVideoTrack);
         }
         if (localAudioTrack) {
-          console.log("Adding local audio track");
           pc.addTrack(localAudioTrack);
         }
 
-        await pc.setRemoteDescription(remoteSdp);
-        console.log("Remote description set, signaling state:", pc.signalingState);
-
-        // Prepare a media stream for remote tracks
         if (remoteVideoRef.current && !remoteVideoRef.current.srcObject) {
           remoteVideoRef.current.srcObject = new MediaStream();
         }
 
         pc.ontrack = (e) => {
-          console.log("Received remote track:", e.track.kind);
           const stream = remoteVideoRef.current?.srcObject;
           if (stream && stream.addTrack) {
             stream.addTrack(e.track);
@@ -159,13 +191,11 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
 
         pc.onicecandidate = (e) => {
           if (e.candidate) {
-            console.log("Sending ICE candidate");
             s.emit("add-ice-candidate", { candidate: e.candidate, type: "receiver", roomId });
           }
         };
 
         pc.oniceconnectionstatechange = () => {
-          console.log("ICE connection state:", pc.iceConnectionState);
           if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
             setConnectionStatus("Connected");
           } else if (pc.iceConnectionState === 'failed') {
@@ -173,9 +203,65 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
           }
         };
 
-        const sdp = await pc.createAnswer();
-        await pc.setLocalDescription(sdp);
+        // Store this PC as the receiving one; will set remote and answer upon offer event
         setReceivingPc(pc);
+      } catch (err) {
+        console.error("Error preparing receiver peer connection:", err);
+        setError("Failed to prepare connection");
+      }
+    });
+
+    s.on("offer", async ({ roomId, sdp: remoteSdp }) => {
+      console.log("Received offer for room:", roomId);
+      setLobby(false);
+      setPartnerDisconnected(false);
+      setConnectionStatus("Establishing connection...");
+      
+      try {
+        // Use existing receivingPc if present (set by wait-offer), else create
+        let pcRef = receivingPc;
+        if (!pcRef) {
+          pcRef = new RTCPeerConnection(rtcConfiguration);
+
+          if (localVideoTrack) {
+            pcRef.addTrack(localVideoTrack);
+          }
+          if (localAudioTrack) {
+            pcRef.addTrack(localAudioTrack);
+          }
+
+          if (remoteVideoRef.current && !remoteVideoRef.current.srcObject) {
+            remoteVideoRef.current.srcObject = new MediaStream();
+          }
+
+          pcRef.ontrack = (e) => {
+            const stream = remoteVideoRef.current?.srcObject;
+            if (stream && stream.addTrack) {
+              stream.addTrack(e.track);
+              setConnectionStatus("Connected");
+            }
+          };
+
+          pcRef.onicecandidate = (e) => {
+            if (e.candidate) {
+              s.emit("add-ice-candidate", { candidate: e.candidate, type: "receiver", roomId });
+            }
+          };
+
+          pcRef.oniceconnectionstatechange = () => {
+            if (pcRef.iceConnectionState === 'connected' || pcRef.iceConnectionState === 'completed') {
+              setConnectionStatus("Connected");
+            } else if (pcRef.iceConnectionState === 'failed') {
+              setError("Connection failed. Please try again.");
+            }
+          };
+
+          setReceivingPc(pcRef);
+        }
+
+        await pcRef.setRemoteDescription(remoteSdp);
+        const sdp = await pcRef.createAnswer();
+        await pcRef.setLocalDescription(sdp);
 
         s.emit("answer", { roomId, sdp });
       } catch (err) {
@@ -188,14 +274,11 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       console.log("Received answer");
       setSendingPc((pc) => { 
         if (pc && pc.signalingState !== 'closed') {
-          // Check if we're in the right state to set remote description
           if (pc.signalingState === 'have-local-offer') {
             pc.setRemoteDescription(remoteSdp).catch(err => {
               console.error("Error setting remote description:", err);
             });
           } else {
-            console.log("Peer connection not ready for remote description, current state:", pc.signalingState);
-            // Queue the answer to be processed when ready
             setTimeout(() => {
               if (pc.signalingState === 'have-local-offer') {
                 pc.setRemoteDescription(remoteSdp).catch(err => {
@@ -212,6 +295,7 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
     s.on("lobby", () => {
       console.log("Back in lobby");
       setLobby(true);
+      setPartnerDisconnected(false);
       setConnectionStatus("Finding someone...");
     });
 
@@ -241,6 +325,8 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
     setSocket(s);
     return () => {
       console.log("Cleaning up socket connection");
+      cleanupConnections();
+      s.emit('manual-disconnect');
       s.disconnect();
     };
   }, [name, localAudioTrack, localVideoTrack]);
@@ -266,14 +352,24 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
     }
   };
 
-  const endCall = () => {
-    if (sendingPc) {
-      sendingPc.close();
-    }
-    if (receivingPc) {
-      receivingPc.close();
-    }
+  const nextChat = () => {
+    cleanupConnections();
     if (socket) {
+      // Use new 'next' flow: server tears down room and requeues both users
+      socket.emit('next');
+      setLobby(true);
+      setPartnerDisconnected(false);
+      setConnectionStatus("Finding someone...");
+      return;
+    }
+    window.location.href = "/";
+  };
+
+  const quitChat = () => {
+    // Fully quit: notify server to remove this user and leave app
+    cleanupConnections();
+    if (socket) {
+      socket.emit('manual-disconnect');
       socket.disconnect();
     }
     window.location.href = "/";
@@ -286,7 +382,7 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
           <div className="flex items-center space-x-4">
             <h1 className="text-2xl font-bold text-white">FreeTalk</h1>
             <div className="flex items-center space-x-2">
-              <div className={`w-3 h-3 rounded-full ${lobby ? 'bg-yellow-400' : 'bg-green-400'} animate-pulse`} />
+              <div className={`w-3 h-3 rounded-full ${lobby ? 'bg-yellow-400' : partnerDisconnected ? 'bg-red-400' : 'bg-green-400'} animate-pulse`} />
               <span className="text-gray-300 text-sm">{connectionStatus}</span>
             </div>
           </div>
@@ -303,6 +399,12 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
           >
             ✕
           </button>
+        </div>
+      )}
+
+      {partnerDisconnected && (
+        <div className="bg-orange-500/20 border border-orange-500/50 p-4 text-orange-200 text-center">
+          <p>Your partner disconnected. Finding a new match...</p>
         </div>
       )}
 
@@ -329,11 +431,13 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
               <video autoPlay playsInline ref={remoteVideoRef} className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
               <div className="absolute bottom-4 left-4 bg-black/50 backdrop-blur-sm px-4 py-2 rounded-full text-white font-medium">Stranger</div>
-              {lobby && (
+              {(lobby || partnerDisconnected) && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-white text-center">
                     <div className="w-16 h-16 mx-auto mb-4 bg-white/20 rounded-full flex items-center justify-center animate-pulse" />
-                    <p className="text-sm">Waiting for someone to join...</p>
+                    <p className="text-sm">
+                      {partnerDisconnected ? "Partner disconnected. Finding new match..." : "Waiting for someone to join..."}
+                    </p>
                   </div>
                 </div>
               )}
@@ -354,9 +458,18 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
               {localAudioTrack?.enabled ? "Turn Off Audio" : "Turn On Audio"}
             </button>
             <button
-              className="px-8 py-3 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 transition-all duration-300 text-white font-medium rounded-xl shadow-lg"
-              onClick={endCall}
-            >End Call</button>
+              className={`px-8 py-3 transition-all duration-300 text-white font-medium rounded-xl shadow-lg ${
+                lobby || partnerDisconnected 
+                  ? 'bg-gray-500 cursor-not-allowed opacity-50' 
+                  : 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700'
+              }`}
+              onClick={nextChat}
+              disabled={lobby || partnerDisconnected}
+            >Next</button>
+            <button
+              className="px-8 py-3 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 transition-all duration-300 text-white font-medium rounded-xl shadow-lg"
+              onClick={quitChat}
+            >Quit</button>
           </div>
         </div>
       </div>

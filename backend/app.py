@@ -27,6 +27,21 @@ def handle_disconnect():
     print(f'User disconnected: {request.sid}')
     user_manager.remove_user(request.sid)
 
+@socketio.on('manual-disconnect')
+def handle_manual_disconnect():
+    print(f'User manually disconnected: {request.sid}')
+    user_manager.remove_user(request.sid)
+
+@socketio.on('next')
+def handle_next():
+    print(f'User requested next: {request.sid}')
+    user_manager.next_user(request.sid)
+
+@socketio.on('ready-for-new')
+def handle_ready_for_new():
+    print(f'User ready for new match: {request.sid}')
+    user_manager.enqueue_user(request.sid)
+
 @socketio.on('offer')
 def handle_offer(data):
     user_manager.room_manager.on_offer(data['roomId'], data['sdp'], request.sid)
@@ -51,5 +66,5 @@ if __name__ == '__main__':
         host='0.0.0.0',
         port=3000,
         debug=False,
-        allow_unsafe_werkzeug=False
+        allow_unsafe_werkzeug=True
     )
