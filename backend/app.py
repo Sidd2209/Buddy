@@ -63,6 +63,16 @@ def handle_ice_candidate(data):
 def health_check():
     return {'status': 'ok', 'message': 'Buddy Backend is running'}
 
+@app.route('/status')
+def queue_status():
+    """Debug endpoint to check queue status"""
+    status = user_manager.get_queue_status()
+    return {
+        'status': 'ok',
+        'queue_status': status,
+        'active_rooms': len(user_manager.room_manager.rooms)
+    }
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 3000))
     print("🚀 Starting Buddy Server...")

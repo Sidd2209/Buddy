@@ -14,6 +14,8 @@ class RoomManager:
             "user2_socket": user2["socket_id"]
         }
         
+        print(f"Room {room_id} created for users {user1['socket_id']} and {user2['socket_id']}")
+        
         # Assign roles to avoid glare: user1 offers, user2 waits
         emit("send-offer", {"roomId": room_id}, room=user1["socket_id"])
         emit("wait-offer", {"roomId": room_id}, room=user2["socket_id"])
