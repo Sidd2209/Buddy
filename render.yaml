@@ -1,7 +1,7 @@
 services:
   # Backend API service
   - type: web
-    name: buddy-backend
+    name: buddy-backend-testing
     env: python
     plan: free
     buildCommand: pip install -r backend/requirements.txt
@@ -18,14 +18,14 @@ services:
 
   # Frontend service
   - type: static
-    name: buddy-frontend
+    name: buddy-frontend-testing
     plan: free
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     envVars:
       - key: VITE_BACKEND_URL
         fromService:
-          name: buddy-backend
+          name: buddy-backend-testing
           type: web
           property: url
       - key: NODE_ENV
