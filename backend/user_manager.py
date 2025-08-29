@@ -89,37 +89,50 @@ class UserManager:
         Omegle-style next: immediately disconnect from current partner and find new match
         """
         with self.lock:
+            print(f"Processing next request for user {socket_id}")
+            
             # Find the room
             room_id, room = self.room_manager.get_room_by_user(socket_id)
             if room:
                 # User is in a room - proceed with next
                 print(f"User {socket_id} requested next from room {room_id}")
+                print(f"Room users: {room['user1']['name']} ({room['user1_socket']}) and {room['user2']['name']} ({room['user2_socket']})")
                 
                 # Identify partner
                 if room["user1_socket"] == socket_id:
                     partner_socket = room["user2_socket"]
-                    partner_name = room["user2"]["name"]
                 else:
                     partner_socket = room["user1_socket"]
-                    partner_name = room["user1"]["name"]
 
-                # Update user states
+                # Remove room first
+                self.room_manager.remove_room(room_id)
+                
+                # Notify partner about disconnection
+                emit("partner-disconnected", room=partner_socket)
+
+                # Update user states and add to queue
                 if socket_id in self.users:
                     self.users[socket_id]["state"] = "queue"
                     self.users[socket_id]["timestamp"] = time.time()
                     self.users[socket_id]["connection_attempts"] = 0
+                    self.users[socket_id]["last_activity"] = time.time()
+                    if socket_id not in self.queue:
+                        self.queue.append(socket_id)
+                        emit("lobby", room=socket_id)
+                
                 if partner_socket in self.users:
                     self.users[partner_socket]["state"] = "queue"
                     self.users[partner_socket]["timestamp"] = time.time()
                     self.users[partner_socket]["connection_attempts"] = 0
-
-                # Remove room and notify both sides appropriately
-                self.room_manager.remove_room(room_id)
-                emit("partner-disconnected", room=partner_socket)
-
-                # Enqueue both users for new matches
-                self.enqueue_user(socket_id)
-                self.enqueue_user(partner_socket)
+                    self.users[partner_socket]["last_activity"] = time.time()
+                    if partner_socket not in self.queue:
+                        self.queue.append(partner_socket)
+                        emit("lobby", room=partner_socket)
+                
+                # Process queue to find new matches
+                print(f"Processing queue after next request. Queue length: {len(self.queue)}")
+                self.process_queue()
+                print(f"Next request completed for user {socket_id}")
             else:
                 # User is not in a room (just waiting in queue) - ignore next request
                 print(f"User {socket_id} requested next but is not in a room (just waiting)")
@@ -170,6 +183,9 @@ class UserManager:
             id1 = self.queue.pop(0)
             id2 = self.queue.pop(0)
             
+            # Add a small delay to ensure proper cleanup from previous connections
+            time.sleep(0.1)
+            
             # Verify both users still exist and are in queue state
             if id1 not in self.users or id2 not in self.users:
                 print("Pairing failed: One or both users not found in users dict.")
@@ -208,7 +224,7 @@ class UserManager:
             user1["connection_attempts"] = user1.get("connection_attempts", 0) + 1
             user2["connection_attempts"] = user2.get("connection_attempts", 0) + 1
 
-            print(f"Creating room for {user1['name']} and {user2['name']}...")
+            print(f"Creating room for {user1['name']} ({user1['socket_id']}) and {user2['name']} ({user2['socket_id']})...")
             self.room_manager.create_room(user1, user2)
 
     def cleanup_inactive_users(self):

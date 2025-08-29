@@ -36,23 +36,46 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
   const [partnerName, setPartnerName] = useState("Stranger");
   const [connectionAttempts, setConnectionAttempts] = useState(0);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isNexting, setIsNexting] = useState(false);
+
 
   const remoteVideoRef = useRef(null);
   const localVideoRef = useRef(null);
 
   // Cleanup function for WebRTC connections
   const cleanupConnections = () => {
+    console.log("Cleaning up WebRTC connections...");
+    
+    // Close and cleanup sending peer connection
     if (sendingPc) {
-      sendingPc.close();
+      try {
+        sendingPc.close();
+        console.log("Sending PC closed");
+      } catch (err) {
+        console.error("Error closing sending PC:", err);
+      }
       setSendingPc(null);
     }
+    
+    // Close and cleanup receiving peer connection
     if (receivingPc) {
-      receivingPc.close();
+      try {
+        receivingPc.close();
+        console.log("Receiving PC closed");
+      } catch (err) {
+        console.error("Error closing receiving PC:", err);
+      }
       setReceivingPc(null);
     }
+    
     // Clear remote video stream
     if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = null;
+      try {
+        remoteVideoRef.current.srcObject = null;
+        console.log("Remote video stream cleared");
+      } catch (err) {
+        console.error("Error clearing remote video:", err);
+      }
     }
   };
 
@@ -99,15 +122,12 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       setPartnerName("Stranger");
       cleanupConnections();
       
-      // Immediately queue for a new match
-      s.emit('ready-for-new');
-      
       // Show message briefly while we wait for server to pair
       setTimeout(() => {
         setPartnerDisconnected(false);
         setLobby(true);
         setConnectionStatus("Finding someone...");
-      }, 800); // Reduced from 1200ms for faster reconnection
+      }, 500); // Faster reconnection
     });
 
     s.on("connection-timeout", () => {
@@ -133,6 +153,12 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       setPartnerName(pName || "Stranger");
       setConnectionStatus("Establishing connection...");
       setIsConnecting(false);
+      
+      // Ensure any existing connections are cleaned up before starting new one
+      cleanupConnections();
+      
+      // Small delay to ensure cleanup is complete
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       try {
         const pc = new RTCPeerConnection(rtcConfiguration);
@@ -176,7 +202,13 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
             // Notify server that connection is established
             s.emit('connection-established', { roomId });
           } else if (pc.iceConnectionState === 'failed') {
+            console.error("ICE connection failed");
             setError("Connection failed. Please try again.");
+            // Clean up failed connection
+            cleanupConnections();
+          } else if (pc.iceConnectionState === 'disconnected') {
+            console.log("ICE connection disconnected");
+            setConnectionStatus("Connection lost");
           }
         };
 
@@ -206,6 +238,12 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       setPartnerName(pName || "Stranger");
       setConnectionStatus("Establishing connection...");
       setIsConnecting(false);
+      
+      // Ensure any existing connections are cleaned up before starting new one
+      cleanupConnections();
+      
+      // Small delay to ensure cleanup is complete
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       try {
         const pc = new RTCPeerConnection(rtcConfiguration);
@@ -241,7 +279,13 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
             // Notify server that connection is established
             s.emit('connection-established', { roomId });
           } else if (pc.iceConnectionState === 'failed') {
+            console.error("ICE connection failed");
             setError("Connection failed. Please try again.");
+            // Clean up failed connection
+            cleanupConnections();
+          } else if (pc.iceConnectionState === 'disconnected') {
+            console.log("ICE connection disconnected");
+            setConnectionStatus("Connection lost");
           }
         };
 
@@ -296,7 +340,13 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
               // Notify server that connection is established
               s.emit('connection-established', { roomId });
             } else if (pcRef.iceConnectionState === 'failed') {
+              console.error("ICE connection failed");
               setError("Connection failed. Please try again.");
+              // Clean up failed connection
+              cleanupConnections();
+            } else if (pcRef.iceConnectionState === 'disconnected') {
+              console.log("ICE connection disconnected");
+              setConnectionStatus("Connection lost");
             }
           };
 
@@ -344,6 +394,9 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       setConnectionStatus("Finding someone...");
       setIsConnecting(true);
       setConnectionAttempts(prev => prev + 1);
+      
+      // Ensure connections are cleaned up when entering lobby
+      cleanupConnections();
     });
 
     s.on("add-ice-candidate", ({ candidate, type }) => {
@@ -400,17 +453,26 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
   };
 
   const nextChat = () => {
-    cleanupConnections();
-    if (socket) {
-      // Use new 'next' flow: server tears down room and requeues both users
-      socket.emit('next');
+    if (socket && !isNexting) {
+      setIsNexting(true);
+      
+      // First, clean up WebRTC connections
+      cleanupConnections();
+      
+      // Set UI to searching state immediately
       setLobby(true);
       setPartnerDisconnected(false);
       setPartnerName("Stranger");
       setConnectionStatus("Finding someone...");
-      return;
+      setIsConnecting(true);
+      
+      // Small delay to ensure cleanup is complete before requesting next
+      setTimeout(() => {
+        socket.emit('next');
+        // Reset isNexting after a delay to allow for the next request to complete
+        setTimeout(() => setIsNexting(false), 1000);
+      }, 150);
     }
-    window.location.href = "/";
   };
 
   const quitChat = () => {
@@ -456,14 +518,7 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
         </div>
       )}
 
-      {isConnecting && (
-        <div className="bg-blue-500/20 border border-blue-500/50 p-4 text-blue-200 text-center">
-          <div className="flex items-center justify-center space-x-2">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-300"></div>
-            <p>Searching for someone to chat with... (Attempt {connectionAttempts})</p>
-          </div>
-        </div>
-      )}
+
 
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="max-w-6xl w-full">
@@ -528,25 +583,20 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
             </button>
             <button
               className={`px-8 py-3 transition-all duration-300 text-white font-medium rounded-xl shadow-lg ${
-                lobby || partnerDisconnected 
+                lobby || partnerDisconnected || isNexting
                   ? 'bg-gray-500 cursor-not-allowed opacity-50' 
                   : 'bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700'
               }`}
               onClick={nextChat}
-              disabled={lobby || partnerDisconnected}
-            >Next</button>
+              disabled={lobby || partnerDisconnected || isNexting}
+            >{isNexting ? "Next..." : "Next"}</button>
             <button
               className="px-8 py-3 bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 transition-all duration-300 text-white font-medium rounded-xl shadow-lg"
               onClick={quitChat}
             >Quit</button>
           </div>
           
-          {/* Connection Stats */}
-          {!lobby && !partnerDisconnected && (
-            <div className="mt-4 text-center text-gray-300 text-sm">
-              <p>Connected with {partnerName} • Total connections: {connectionAttempts}</p>
-            </div>
-          )}
+
         </div>
       </div>
     </div>
