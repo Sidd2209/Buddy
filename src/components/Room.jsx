@@ -9,7 +9,7 @@ console.log("Environment variables:", import.meta.env);
 console.log("Backend URL:", BACKEND_URL);
 console.log("VITE_BACKEND_URL value:", import.meta.env.VITE_BACKEND_URL);
 
-// WebRTC configuration with STUN servers
+// Optimized WebRTC configuration for better performance
 const rtcConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -18,7 +18,10 @@ const rtcConfiguration = {
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' }
   ],
-  iceCandidatePoolSize: 10
+  iceCandidatePoolSize: 10,
+  bundlePolicy: 'max-bundle',
+  rtcpMuxPolicy: 'require',
+  iceTransportPolicy: 'all'
 };
 
 const Room = ({ name, localAudioTrack, localVideoTrack }) => {
@@ -29,6 +32,7 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
   const [connectionStatus, setConnectionStatus] = useState("Connecting...");
   const [error, setError] = useState(null);
   const [partnerDisconnected, setPartnerDisconnected] = useState(false);
+  const [partnerName, setPartnerName] = useState("Stranger");
 
   const remoteVideoRef = useRef(null);
   const localVideoRef = useRef(null);
@@ -65,8 +69,8 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       console.log("Connected to server:", s.id);
       setConnectionStatus("Connected to server");
       setPartnerDisconnected(false);
-      // Ensure we're in the queue when connected
-      s.emit('ready-for-new');
+      // Send join event with user name
+      s.emit('join', { name });
     });
 
     s.on("connect_error", (error) => {
@@ -80,10 +84,16 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       setConnectionStatus("Disconnected");
     });
 
+    s.on("error", (data) => {
+      console.error("Server error:", data);
+      setError(data.message || "Server error occurred");
+    });
+
     s.on("partner-disconnected", () => {
       console.log("Partner disconnected");
       setPartnerDisconnected(true);
       setConnectionStatus("Partner disconnected - finding new match...");
+      setPartnerName("Stranger");
       cleanupConnections();
       
       // Immediately queue for a new match
@@ -97,10 +107,11 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       }, 1200);
     });
 
-    s.on("send-offer", async ({ roomId }) => {
-      console.log("Creating offer for room:", roomId);
+    s.on("send-offer", async ({ roomId, partnerName: pName }) => {
+      console.log("Creating offer for room:", roomId, "Partner:", pName);
       setLobby(false);
       setPartnerDisconnected(false);
+      setPartnerName(pName || "Stranger");
       setConnectionStatus("Establishing connection...");
       
       try {
@@ -166,10 +177,11 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
     });
 
     // New: wait-offer role; prepare PC and only answer once offer arrives
-    s.on("wait-offer", async ({ roomId }) => {
-      console.log("Waiting for offer in room:", roomId);
+    s.on("wait-offer", async ({ roomId, partnerName: pName }) => {
+      console.log("Waiting for offer in room:", roomId, "Partner:", pName);
       setLobby(false);
       setPartnerDisconnected(false);
+      setPartnerName(pName || "Stranger");
       setConnectionStatus("Establishing connection...");
 
       try {
@@ -301,6 +313,7 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       console.log("Back in lobby");
       setLobby(true);
       setPartnerDisconnected(false);
+      setPartnerName("Stranger");
       setConnectionStatus("Finding someone...");
     });
 
@@ -364,6 +377,7 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       socket.emit('next');
       setLobby(true);
       setPartnerDisconnected(false);
+      setPartnerName("Stranger");
       setConnectionStatus("Finding someone...");
       return;
     }
@@ -435,7 +449,7 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
             <div className="relative aspect-video rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 bg-black/20">
               <video autoPlay playsInline ref={remoteVideoRef} className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-              <div className="absolute bottom-4 left-4 bg-black/50 backdrop-blur-sm px-4 py-2 rounded-full text-white font-medium">Stranger</div>
+              <div className="absolute bottom-4 left-4 bg-black/50 backdrop-blur-sm px-4 py-2 rounded-full text-white font-medium">{partnerName}</div>
               {(lobby || partnerDisconnected) && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-white text-center">
@@ -451,13 +465,21 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
 
           <div className="flex justify-center space-x-4">
             <button
-              className="px-8 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-white font-medium hover:bg-white/20 transition-all duration-300"
+              className={`px-8 py-3 backdrop-blur-sm border rounded-xl font-medium transition-all duration-300 ${
+                localVideoTrack?.enabled 
+                  ? 'bg-white/10 border-white/20 text-white hover:bg-white/20' 
+                  : 'bg-red-500/20 border-red-500/50 text-red-200 hover:bg-red-500/30'
+              }`}
               onClick={toggleVideo}
             >
               {localVideoTrack?.enabled ? "Turn Off Video" : "Turn On Video"}
             </button>
             <button
-              className="px-8 py-3 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-white font-medium hover:bg-white/20 transition-all duration-300"
+              className={`px-8 py-3 backdrop-blur-sm border rounded-xl font-medium transition-all duration-300 ${
+                localAudioTrack?.enabled 
+                  ? 'bg-white/10 border-white/20 text-white hover:bg-white/20' 
+                  : 'bg-red-500/20 border-red-500/50 text-red-200 hover:bg-red-500/30'
+              }`}
               onClick={toggleAudio}
             >
               {localAudioTrack?.enabled ? "Turn Off Audio" : "Turn On Audio"}

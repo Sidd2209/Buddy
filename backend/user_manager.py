@@ -1,6 +1,8 @@
 from flask_socketio import emit
 from room_manager import RoomManager
+from performance_config import performance_config
 import threading
+import time
 
 class UserManager:
     def __init__(self):
@@ -8,27 +10,46 @@ class UserManager:
         self.queue = []
         self.room_manager = RoomManager()
         self.lock = threading.Lock()  # Thread safety for queue operations
+        
+        # Use performance config
+        self.max_concurrent_users = performance_config.MAX_CONCURRENT_USERS
+        self.user_timeout = performance_config.USER_TIMEOUT_SECONDS
 
     def add_user(self, name, socket_id):
         with self.lock:
+            # Check if we're at capacity
+            if not performance_config.should_accept_new_user(self, self.room_manager):
+                emit("error", {"message": "Server is at capacity. Please try again later."}, room=socket_id)
+                return False
+            
+            # Check if user already exists
+            if socket_id in self.users:
+                print(f"User {socket_id} already exists")
+                return False
+            
             # Add user to users dict
-            self.users[socket_id] = {"name": name, "socket_id": socket_id, "state": "queue"}
+            self.users[socket_id] = {
+                "name": name, 
+                "socket_id": socket_id, 
+                "state": "queue",
+                "timestamp": time.time()
+            }
             
             # Add to queue
             if socket_id not in self.queue:
                 self.queue.append(socket_id)
-                print(f"User {socket_id} added to queue. Queue length: {len(self.queue)}")
+                print(f"User {name} ({socket_id}) added to queue. Queue length: {len(self.queue)}")
             
             emit("lobby", room=socket_id)
             self.clear_queue()
-        self.init_handlers(socket_id)
+        return True
 
     def enqueue_user(self, socket_id):
         with self.lock:
             # Check if user exists and is not already in queue or room
             if socket_id not in self.users:
                 print(f"User {socket_id} not found in users")
-                return
+                return False
                 
             user = self.users[socket_id]
             current_state = user.get("state", "unknown")
@@ -36,19 +57,21 @@ class UserManager:
             # Only enqueue if user is not already queued and not in a room
             if current_state == "queue" and socket_id in self.queue:
                 print(f"User {socket_id} already in queue")
-                return
+                return False
                 
             if current_state == "room":
                 print(f"User {socket_id} is in a room, cannot enqueue")
-                return
+                return False
             
             # Update user state and add to queue
             user["state"] = "queue"
+            user["timestamp"] = time.time()
             if socket_id not in self.queue:
                 self.queue.append(socket_id)
                 print(f"User {socket_id} enqueued. Queue length: {len(self.queue)}")
                 emit("lobby", room=socket_id)
                 self.clear_queue()
+            return True
 
     def next_user(self, socket_id):
         """
@@ -66,14 +89,18 @@ class UserManager:
                 # Identify partner
                 if room["user1_socket"] == socket_id:
                     partner_socket = room["user2_socket"]
+                    partner_name = room["user2"]["name"]
                 else:
                     partner_socket = room["user1_socket"]
+                    partner_name = room["user1"]["name"]
 
                 # Update user states
                 if socket_id in self.users:
                     self.users[socket_id]["state"] = "queue"
+                    self.users[socket_id]["timestamp"] = time.time()
                 if partner_socket in self.users:
                     self.users[partner_socket]["state"] = "queue"
+                    self.users[partner_socket]["timestamp"] = time.time()
 
                 # Remove room and notify both sides appropriately
                 self.room_manager.remove_room(room_id)
@@ -94,7 +121,9 @@ class UserManager:
             
             # Remove user from users dict
             if socket_id in self.users:
+                user_name = self.users[socket_id].get("name", "Unknown")
                 del self.users[socket_id]
+                print(f"User {user_name} ({socket_id}) removed")
             
             # Remove user from queue if they're in it
             if socket_id in self.queue:
@@ -108,6 +137,7 @@ class UserManager:
                 # Update remaining user's state
                 if remaining_socket_id in self.users:
                     self.users[remaining_socket_id]["state"] = "queue"
+                    self.users[remaining_socket_id]["timestamp"] = time.time()
                 
                 # Add to queue if not already there
                 if remaining_socket_id not in self.queue:
@@ -115,7 +145,7 @@ class UserManager:
                     emit("lobby", room=remaining_socket_id)
                     self.clear_queue()
             
-            print(f"User {socket_id} removed. Queue length: {len(self.queue)}")
+            print(f"Queue length after removal: {len(self.queue)}")
 
     def clear_queue(self):
         print("Inside clearQueue")
@@ -154,15 +184,24 @@ class UserManager:
         user1["state"] = "room"
         user2["state"] = "room"
 
-        print("Creating room...")
+        print(f"Creating room for {user1['name']} and {user2['name']}...")
         self.room_manager.create_room(user1, user2)
         
         # Continue processing queue
         self.clear_queue()
 
-    def init_handlers(self, socket_id):
-        # Handlers are now managed in the main app.py file
-        pass
+    def cleanup_inactive_users(self):
+        """Remove users who have been inactive for too long"""
+        current_time = time.time()
+        with self.lock:
+            inactive_users = []
+            for socket_id, user in self.users.items():
+                if current_time - user.get("timestamp", 0) > self.user_timeout:
+                    inactive_users.append(socket_id)
+            
+            for socket_id in inactive_users:
+                self.remove_user(socket_id)
+                print(f"Removed inactive user {socket_id}")
 
     def get_user_by_socket(self, socket_id):
         """
@@ -191,5 +230,6 @@ class UserManager:
                 "queue_length": len(self.queue),
                 "queue_users": self.queue.copy(),
                 "total_users": len(self.users),
-                "user_states": {socket_id: user.get("state", "unknown") for socket_id, user in self.users.items()}
+                "user_states": {socket_id: user.get("state", "unknown") for socket_id, user in self.users.items()},
+                "max_concurrent_users": self.max_concurrent_users
             }

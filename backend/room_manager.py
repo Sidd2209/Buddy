@@ -14,11 +14,19 @@ class RoomManager:
             "user2_socket": user2["socket_id"]
         }
         
-        print(f"Room {room_id} created for users {user1['socket_id']} and {user2['socket_id']}")
+        print(f"Room {room_id} created for users {user1['name']} and {user2['name']}")
         
         # Assign roles to avoid glare: user1 offers, user2 waits
-        emit("send-offer", {"roomId": room_id}, room=user1["socket_id"])
-        emit("wait-offer", {"roomId": room_id}, room=user2["socket_id"])
+        # Pass partner names to both users
+        emit("send-offer", {
+            "roomId": room_id, 
+            "partnerName": user2["name"]
+        }, room=user1["socket_id"])
+        
+        emit("wait-offer", {
+            "roomId": room_id, 
+            "partnerName": user1["name"]
+        }, room=user2["socket_id"])
 
     def on_offer(self, room_id, sdp, sender_socket_id):
         room = self.rooms.get(room_id)
@@ -94,5 +102,10 @@ class RoomManager:
 
     def remove_room(self, room_id):
         if room_id in self.rooms:
+            room = self.rooms[room_id]
+            print(f"Room {room_id} removed for users {room['user1']['name']} and {room['user2']['name']}")
             del self.rooms[room_id]
-            print(f"Room {room_id} removed")
+
+    def get_room_count(self):
+        """Get the current number of active rooms"""
+        return len(self.rooms)
