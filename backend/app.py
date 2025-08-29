@@ -23,12 +23,13 @@ socketio = SocketIO(
 user_manager = UserManager()
 
 def cleanup_inactive_users():
-    """Periodic cleanup of inactive users"""
+    """Periodic cleanup of inactive users and stale rooms"""
     cleanup_config = performance_config.get_cleanup_config()
     while True:
         time.sleep(cleanup_config['cleanup_interval'])
         try:
             user_manager.cleanup_inactive_users()
+            user_manager.room_manager.cleanup_stale_rooms()
         except Exception as e:
             print(f"Error in cleanup: {e}")
 
@@ -97,15 +98,23 @@ def handle_ready_for_new():
 
 @socketio.on('offer')
 def handle_offer(data):
+    user_manager.update_user_activity(request.sid)
     user_manager.room_manager.on_offer(data['roomId'], data['sdp'], request.sid)
 
 @socketio.on('answer')
 def handle_answer(data):
+    user_manager.update_user_activity(request.sid)
     user_manager.room_manager.on_answer(data['roomId'], data['sdp'], request.sid)
 
 @socketio.on('add-ice-candidate')
 def handle_ice_candidate(data):
+    user_manager.update_user_activity(request.sid)
     user_manager.room_manager.on_ice_candidates(data['roomId'], request.sid, data['candidate'], data['type'])
+
+@socketio.on('connection-established')
+def handle_connection_established(data):
+    user_manager.update_user_activity(request.sid)
+    user_manager.room_manager.on_connection_established(data['roomId'], request.sid)
 
 @app.route('/')
 def health_check():
@@ -116,10 +125,12 @@ def queue_status():
     """Debug endpoint to check queue status"""
     status = user_manager.get_queue_status()
     stats = performance_config.get_server_stats(user_manager, user_manager.room_manager)
+    room_stats = user_manager.room_manager.get_room_stats()
     return {
         'status': 'ok',
         'queue_status': status,
         'server_stats': stats,
+        'room_stats': room_stats,
         'performance_config': {
             'max_concurrent_users': performance_config.MAX_CONCURRENT_USERS,
             'max_rooms': performance_config.MAX_ROOMS,

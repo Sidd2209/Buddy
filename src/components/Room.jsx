@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
+import ConnectionMonitor from "./ConnectionMonitor";
 
 // Use localhost for local development
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL) || "http://localhost:3000";
@@ -33,6 +34,8 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
   const [error, setError] = useState(null);
   const [partnerDisconnected, setPartnerDisconnected] = useState(false);
   const [partnerName, setPartnerName] = useState("Stranger");
+  const [connectionAttempts, setConnectionAttempts] = useState(0);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const remoteVideoRef = useRef(null);
   const localVideoRef = useRef(null);
@@ -104,7 +107,23 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
         setPartnerDisconnected(false);
         setLobby(true);
         setConnectionStatus("Finding someone...");
-      }, 1200);
+      }, 800); // Reduced from 1200ms for faster reconnection
+    });
+
+    s.on("connection-timeout", () => {
+      console.log("Connection timeout");
+      setError("Connection timeout. Finding new match...");
+      cleanupConnections();
+      setLobby(true);
+      setPartnerDisconnected(false);
+      setPartnerName("Stranger");
+      setConnectionStatus("Finding someone...");
+      
+      // Clear error after 3 seconds
+      setTimeout(() => setError(null), 3000);
+      
+      // Queue for new match
+      s.emit('ready-for-new');
     });
 
     s.on("send-offer", async ({ roomId, partnerName: pName }) => {
@@ -113,6 +132,7 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       setPartnerDisconnected(false);
       setPartnerName(pName || "Stranger");
       setConnectionStatus("Establishing connection...");
+      setIsConnecting(false);
       
       try {
         const pc = new RTCPeerConnection(rtcConfiguration);
@@ -153,6 +173,8 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
           console.log("ICE connection state:", pc.iceConnectionState);
           if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
             setConnectionStatus("Connected");
+            // Notify server that connection is established
+            s.emit('connection-established', { roomId });
           } else if (pc.iceConnectionState === 'failed') {
             setError("Connection failed. Please try again.");
           }
@@ -183,6 +205,7 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       setPartnerDisconnected(false);
       setPartnerName(pName || "Stranger");
       setConnectionStatus("Establishing connection...");
+      setIsConnecting(false);
 
       try {
         const pc = new RTCPeerConnection(rtcConfiguration);
@@ -215,6 +238,8 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
         pc.oniceconnectionstatechange = () => {
           if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
             setConnectionStatus("Connected");
+            // Notify server that connection is established
+            s.emit('connection-established', { roomId });
           } else if (pc.iceConnectionState === 'failed') {
             setError("Connection failed. Please try again.");
           }
@@ -268,6 +293,8 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
           pcRef.oniceconnectionstatechange = () => {
             if (pcRef.iceConnectionState === 'connected' || pcRef.iceConnectionState === 'completed') {
               setConnectionStatus("Connected");
+              // Notify server that connection is established
+              s.emit('connection-established', { roomId });
             } else if (pcRef.iceConnectionState === 'failed') {
               setError("Connection failed. Please try again.");
             }
@@ -315,6 +342,8 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
       setPartnerDisconnected(false);
       setPartnerName("Stranger");
       setConnectionStatus("Finding someone...");
+      setIsConnecting(true);
+      setConnectionAttempts(prev => prev + 1);
     });
 
     s.on("add-ice-candidate", ({ candidate, type }) => {
@@ -427,6 +456,15 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
         </div>
       )}
 
+      {isConnecting && (
+        <div className="bg-blue-500/20 border border-blue-500/50 p-4 text-blue-200 text-center">
+          <div className="flex items-center justify-center space-x-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-300"></div>
+            <p>Searching for someone to chat with... (Attempt {connectionAttempts})</p>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="max-w-6xl w-full">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
@@ -450,6 +488,10 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
               <video autoPlay playsInline ref={remoteVideoRef} className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
               <div className="absolute bottom-4 left-4 bg-black/50 backdrop-blur-sm px-4 py-2 rounded-full text-white font-medium">{partnerName}</div>
+              <ConnectionMonitor 
+                peerConnection={sendingPc || receivingPc} 
+                isConnected={!lobby && !partnerDisconnected && connectionStatus === "Connected"} 
+              />
               {(lobby || partnerDisconnected) && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-white text-center">
@@ -498,6 +540,13 @@ const Room = ({ name, localAudioTrack, localVideoTrack }) => {
               onClick={quitChat}
             >Quit</button>
           </div>
+          
+          {/* Connection Stats */}
+          {!lobby && !partnerDisconnected && (
+            <div className="mt-4 text-center text-gray-300 text-sm">
+              <p>Connected with {partnerName} • Total connections: {connectionAttempts}</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
